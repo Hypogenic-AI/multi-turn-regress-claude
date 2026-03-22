@@ -1,0 +1,18 @@
+# Ignore the HuggingFace cache directory
+.cache/
+
+# Ignore large full dataset files (keep only samples)
+lost_in_conversation/lost_in_conversation.json
+anthropic_evals/sycophancy/sycophancy_on_*.jsonl
+
+# Ignore any downloaded parquet/arrow files
+*.parquet
+*.arrow
+
+# Ignore model outputs or large generated files
+*.pkl
+*.bin
+
+# Keep sample files (negations override the above patterns)
+!*sample*.json
+!*sample*.jsonl

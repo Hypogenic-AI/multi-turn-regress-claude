@@ -1,0 +1,29 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Alignment Depth as a Stratified Property}
+
+Our most striking finding is the sharp contrast between formatting and safety alignment durability. Uppercase formatting compliance drops from 100\% to 25\% by turn~24 ($d = 2.45$), while safety refusal rates remain at 100\% and subtle safety shows no significant degradation. This dissociation supports a \emph{depth-stratified} view of alignment: different alignment behaviors are encoded at different depths within the model, and shallower behaviors are more vulnerable to multi-turn erosion.
+
+This view is consistent with the mechanistic findings of \citet{li2024ssah}, who show that safety alignment localizes to specific ``Safety Critical Units'' comprising roughly 1.4\% of neurons. Formatting instructions, by contrast, are likely encoded through the same general instruction-following mechanisms that alignment tuning modifies superficially~\citep{lin2024urial}. The practical implication is clear: formatting and style instructions represent the thinnest layer of alignment and are the first to degrade under extended interaction.
+
+\subsection{The Format-Activation Effect}
+
+We did not expect multi-turn conversation structure to \emph{increase} instruct--base divergence relative to concatenated equivalents. The consistent $\Delta \approx 3.1$ nats gap (\tabref{tab:multiturn_vs_concat}) suggests that chat templates and turn markers serve as active signals that engage alignment-specific computation, beyond their role as formatting conventions. This finding complicates the simple regression-to-prior narrative: in multi-turn format, two competing forces operate simultaneously. The turn structure \emph{activates} alignment, while accumulated context gradually \emph{dilutes} it. The net effect depends on the balance between these forces, which may explain why the declining KL trend in multi-turn format is not statistically significant---the activation effect partially masks the regression.
+
+The \concat condition, which removes turn structure, shows a significant declining trend ($p = 0.037$), consistent with regression to the prior operating when the format-activation effect is absent. This suggests that the regression-to-prior mechanism is genuine but is counteracted in natural multi-turn settings by the ongoing activation provided by turn structure.
+
+\subsection{The 10--15 Turn Threshold}
+
+The onset of formatting degradation at approximately 10--15 turns aligns with a natural hypothesis about alignment training data. Most alignment datasets---including those used for SFT and RLHF---consist of conversations with 1--5 turns~\citep{shi2024multiturn_rlhf}. Models are therefore well-calibrated for short interactions but face distributional shift at longer conversation depths. The degradation threshold we observe may reflect the boundary of the model's alignment training distribution.
+
+This interpretation suggests a straightforward mitigation: include longer conversations in alignment training data, or periodically re-inject system instructions during extended interactions. Our finding that safety alignment is robust through 24 turns suggests that safety-specific training may already incorporate longer interaction patterns, or that safety behaviors are reinforced through multiple training objectives (SFT + RLHF + constitutional AI) in ways that make them more durable.
+
+\subsection{Model Size Effects}
+
+An unexpected finding is that \gptnano sometimes outperforms \gptmini on alignment maintenance. For word limit compliance at turn~24, \gptnano scores 1.00 while \gptmini scores 0.81. This could reflect tighter optimization in smaller models---with fewer parameters, the alignment signal may be more concentrated and less susceptible to dilution. Alternatively, smaller context windows in nano-scale models may inherently limit the amount of interfering context that can accumulate. This counterintuitive result warrants further investigation across a wider range of model sizes.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+Our study has several important limitations. First, we test only one local model family (\qwenbase/\qweninst, 7B parameters) and two API models (\gptmini, \gptnano). Results may differ for other architectures, scales, or alignment techniques. Second, our filler conversations are synthetic and benign; real conversations feature more varied content that could accelerate or decelerate alignment degradation. Third, our maximum conversation depth is 24 turns. The 10--15 turn threshold we identify may shift at 50--100+ turns, and safety alignment may eventually degrade at depths we did not test. Fourth, our token distribution analysis uses only first-token prediction; alignment effects may manifest differently over multi-token sequences. Fifth, we cannot fully disentangle turn count from context length, as longer conversations necessarily contain more tokens, though our \concat control partially addresses this confound. Sixth, behavioral probe scoring relies on heuristics and LLM-as-judge evaluation, which may introduce systematic bias. Finally, some probe categories have small sample sizes (4 probes for uppercase format), limiting statistical power for individual turn-level comparisons.

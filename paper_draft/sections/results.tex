@@ -1,0 +1,128 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Token Distribution Analysis (Experiment 1)}
+\label{sec:results_exp1}
+
+\para{Two-phase alignment pattern.}
+\tabref{tab:kl_by_turn} presents the KL divergence between instruct and base model distributions across conversation depths. Rather than a monotonic decrease, we observe a two-phase pattern: $\kldiv$ increases from $8.36 \pm 0.99$ at turn~0 to $9.59 \pm 1.40$ at turn~2, then gradually declines to $9.16 \pm 1.41$ by turn~12. The initial increase reflects the \emph{activation} of alignment signals as the chat template and turn structure engage the instruct model's fine-tuned behavior. The subsequent decline (turns 2--12, slope $= -0.030$) trends in the direction predicted by the regression-to-prior hypothesis but is not statistically significant ($p = 0.355$, $R^2 = 0.006$). Across the full range (turns 0--12), the overall trend is weakly positive (slope $= +0.021$, $p = 0.400$) due to the dominant activation effect at early turns.
+
+Jensen-Shannon divergence and top-100 overlap remain stable across all turn counts ($\jsDiv \approx 0.690$, overlap $\approx 0.055$), indicating that the overall distributional distance between instruct and base models is largely maintained, with KL divergence capturing more fine-grained shifts in the tail of the distribution.
+
+\begin{table}[t]
+\centering
+\caption{KL divergence between \qweninst and \qwenbase output distributions at each conversation depth. Values are mean $\pm$ standard deviation across 24 measurements (8 probes $\times$ 3 topics). The two-phase pattern---increase then decrease---is visible in the KL divergence column.}
+\label{tab:kl_by_turn}
+\vspace{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Turns} & \textbf{$\kldiv$(Instruct $\|$ Base)} & \textbf{$\jsDiv$} & \textbf{Top-100 Overlap} \\
+\midrule
+0  & $8.36 \pm 0.99$ & $0.689 \pm 0.003$ & $0.051 \pm 0.023$ \\
+1  & $9.32 \pm 1.29$ & $0.690 \pm 0.004$ & $0.062 \pm 0.026$ \\
+2  & $\mathbf{9.59 \pm 1.40}$ & $0.690 \pm 0.005$ & $0.054 \pm 0.026$ \\
+3  & $9.36 \pm 1.38$ & $0.690 \pm 0.005$ & $0.055 \pm 0.027$ \\
+5  & $9.35 \pm 1.42$ & $0.690 \pm 0.005$ & $0.055 \pm 0.025$ \\
+7  & $9.32 \pm 1.45$ & $0.690 \pm 0.005$ & $0.055 \pm 0.025$ \\
+10 & $9.31 \pm 1.45$ & $0.690 \pm 0.005$ & $0.056 \pm 0.025$ \\
+12 & $9.16 \pm 1.41$ & $0.690 \pm 0.005$ & $0.055 \pm 0.026$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\para{Multi-turn format amplifies divergence.}
+\tabref{tab:multiturn_vs_concat} compares KL divergence between the \multiturn and \concat conditions. At every turn depth, the multi-turn format produces substantially higher KL divergence than the concatenated equivalent, with a consistent gap of $\Delta \approx 3.1$--$3.4$ nats ($p < 0.0001$ at all depths). This indicates that the chat template and turn markers themselves---not just the accumulated content---cause the instruct model to behave more differently from its base counterpart. Notably, the \concat condition shows a statistically significant declining trend over turns 2--12 (slope $= -0.054$, $p = 0.037$), consistent with regression to the prior when the format-activation effect is removed.
+
+\begin{table}[t]
+\centering
+\caption{KL divergence comparison between \multiturn (chat-formatted) and \concat (single-block) conditions. Multi-turn formatting consistently produces higher instruct--base divergence. The \concat condition shows a significant declining trend ($p = 0.037$), consistent with regression to the prior.}
+\label{tab:multiturn_vs_concat}
+\vspace{4pt}
+\begin{tabular}{@{}lccl@{}}
+\toprule
+\textbf{Turns} & \textbf{\multiturn KL} & \textbf{\concat KL} & \textbf{$p$-value} \\
+\midrule
+0  & 8.36 & 4.94 & $< 0.0001$ \\
+2  & 9.59 & 6.51 & $< 0.0001$ \\
+5  & 9.35 & 6.12 & $< 0.0001$ \\
+10 & 9.31 & 5.99 & $< 0.0001$ \\
+12 & 9.16 & 5.87 & $< 0.0001$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Behavioral Probes: 0--12 Turns (Experiment 2a)}
+\label{sec:results_exp2a}
+
+Safety refusal and instruction compliance remain at ceiling (1.0) through all 12 turns for \gptmini. Persona maintenance shows minor fluctuation ($0.938 \to 1.0 \to 0.938 \to 0.875$ at turns 0, 4, 8, 12) but no statistically significant trend. These results suggest that within a 12-turn window, \gptmini maintains its alignment behaviors across all tested categories.
+
+\subsection{Behavioral Probes: 0--24 Turns (Experiment 2b)}
+\label{sec:results_exp2b}
+
+Extending to 24 turns reveals clear degradation in superficial alignment behaviors. \tabref{tab:behavioral_extended} presents the main results.
+
+\begin{table}[t]
+\centering
+\caption{Behavioral probe compliance scores across 0--24 turns for \gptmini and \gptnano. Uppercase formatting shows the most dramatic degradation ($p < 0.001$ for both models). Safety probes remain robust. Best results per row in \textbf{bold}.}
+\label{tab:behavioral_extended}
+\vspace{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}l cc cc cc@{}}
+\toprule
+& \multicolumn{2}{c}{\textbf{Uppercase Format}} & \multicolumn{2}{c}{\textbf{Word Limit}} & \multicolumn{2}{c}{\textbf{Subtle Safety}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+\textbf{Turns} & \gptmini & \gptnano & \gptmini & \gptnano & \gptmini & \gptnano \\
+\midrule
+0  & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} \\
+3  & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & 0.92 \\
+6  & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & 0.92 & \textbf{1.00} \\
+10 & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & \textbf{1.00} & 0.92 & 0.92 \\
+15 & \textbf{1.00} & 0.50 & 0.88 & 0.94 & 0.92 & \textbf{1.00} \\
+20 & 0.50 & 0.50 & 0.88 & \textbf{1.00} & 0.92 & 0.92 \\
+24 & 0.25\decrease & 0.50\decrease & 0.81\decrease & \textbf{1.00} & 0.92 & \textbf{1.00} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\para{Formatting compliance degrades severely.}
+Uppercase formatting compliance drops from 1.00 to 0.25 for \gptmini (slope $= -0.030$, $R^2 = 0.404$, $p < 0.001$, $d = 2.45$) and from 1.00 to 0.50 for \gptnano (slope $= -0.027$, $R^2 = 0.291$, $p = 0.003$, $d = 1.41$). Word limit compliance also degrades significantly for \gptmini (slope $= -0.013$, $p < 0.001$, $d = 1.10$), with average word count increasing from 24.5 to 34.8. \gptnano shows no significant word limit degradation ($p = 0.276$).
+
+\para{Safety alignment remains robust.}
+Direct safety refusals maintain a perfect score of 1.0 through all 12 turns tested. Subtle safety probes show no significant trend through 24 turns for either model (\gptmini: slope $= -0.004$, $p = 0.416$; \gptnano: slope $= +0.005$, $p = 0.343$).
+
+\para{Degradation threshold at 10--15 turns.}
+Across all behavioral probes, alignment is maintained at or near ceiling through turn 10. Degradation begins between turns 10 and 15, suggesting a threshold effect rather than gradual decline. This is consistent with alignment training data being concentrated in short conversations.
+
+\subsection{Statistical Summary}
+\label{sec:stats_summary}
+
+\tabref{tab:stats_summary} presents the complete statistical results across all experiments.
+
+\begin{table}[t]
+\centering
+\caption{Statistical summary across all probe types and models. Significant results ($p < 0.05$) in \textbf{bold}. Formatting probes show large, significant degradation effects; safety probes show no significant trends.}
+\label{tab:stats_summary}
+\vspace{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\textbf{Probe Type} & \textbf{Model} & \textbf{Slope} & \textbf{$R^2$} & \textbf{$p$-value} & \textbf{Cohen's $d$} \\
+\midrule
+KL div.\ (all turns)    & \qwenbase/\qweninst & $+0.021$ & 0.004 & 0.400 & $-0.67$ \\
+KL div.\ (turns 2--12)  & \qwenbase/\qweninst & $-0.030$ & 0.006 & 0.355 & --- \\
+\concat KL (turns 2--12) & \qwenbase/\qweninst & $-0.054$ & 0.030 & \textbf{0.037} & --- \\
+\midrule
+Uppercase format        & \gptmini           & $-0.030$ & 0.404 & $\mathbf{< 0.001}$ & 2.45 \\
+Uppercase format        & \gptnano           & $-0.027$ & 0.291 & $\mathbf{0.003}$   & 1.41 \\
+Word limit              & \gptmini           & $-0.013$ & 0.293 & $\mathbf{< 0.001}$ & 1.10 \\
+Word limit              & \gptnano           & $-0.002$ & 0.022 & 0.276              & 0.00 \\
+Subtle safety           & \gptmini           & $-0.004$ & 0.017 & 0.416              & 0.15 \\
+Subtle safety           & \gptnano           & $+0.005$ & 0.023 & 0.343              & $-0.14$ \\
+Safety refusal          & \gptmini           & $0.000$  & ---   & ---                & 0.00 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

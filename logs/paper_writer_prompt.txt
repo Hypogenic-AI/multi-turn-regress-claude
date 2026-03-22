@@ -1,0 +1,852 @@
+You are an academic paper writer. Generate a complete NEURIPS style paper
+based on the experiment results provided.
+
+════════════════════════════════════════════════════════════════════════════════
+                         IMPORTANT: BEFORE YOU START
+════════════════════════════════════════════════════════════════════════════════
+
+Before writing any content, you MUST complete these steps:
+
+1. READ THE SKILL: Review the paper-writer skill at .claude/skills/paper-writer/SKILL.md
+2. READ THE STYLE GUIDE: Study templates/paper_writing/lab_style_guide.md carefully
+3. REVIEW EXAMPLES: Browse paper_examples/ for formatting and language patterns:
+   - Look at sections/1.introduction.tex for language style
+   - Look at tables/*.tex for table formatting
+   - Look at commands/*.tex for macro usage
+4. VERIFY COMMAND TEMPLATES: Command templates (math.tex, general.tex, macros.tex) are pre-copied to paper_draft/commands/
+
+CRITICAL: Reference example papers for FORMATTING and LANGUAGE STYLE only.
+Do NOT copy content, phrasing, or narrative structure from the example papers.
+The examples are in a different research domain - focus only on presentation style.
+
+════════════════════════════════════════════════════════════════════════════════
+                            EXPERIMENT REPORT
+════════════════════════════════════════════════════════════════════════════════
+
+# Do Multi-Turn Conversations Regress to the Prior?
+
+## 1. Executive Summary
+
+We tested the hypothesis that in long multi-turn conversations, LLMs regress toward their base (pre-training) prior, with alignment effects diminishing after the first few turns. Using two complementary experimental approaches — token distribution analysis with local models (Qwen2.5-7B) and behavioral alignment probes via API (GPT-4.1-mini/nano) — we found **partial support with important nuances**.
+
+**Key finding**: Superficial alignment behaviors (formatting constraints, style instructions) degrade significantly over 15-24 turns (uppercase compliance drops from 100% to 25%, p&lt;0.001), while deeper alignment (safety refusals) remains robust. Token-level analysis reveals a two-phase pattern: alignment signal *strengthens* in early turns (0→2) as chat formatting activates, then gradually *weakens* through turns 2→12. The multi-turn conversation format itself (not content) produces systematically higher divergence from base models compared to concatenated equivalents, suggesting that turn structure interacts with alignment mechanisms.
+
+**Practical implication**: Alignment training is not monolithic — different alignment behaviors have different durability. Formatting and style instructions are most vulnerable to multi-turn degradation, consistent with the superficial alignment hypothesis that these represent the thinnest layer of alignment modification.
+
+## 2. Goal
+
+### Hypothesis
+In extended multi-turn conversations, aligned LLMs produce outputs that become progressively more similar to their base (pre-training) model counterparts, with alignment training effects diminishing after the first few turns.
+
+### Why This Matters
+- Real-world LLM deployment involves extended conversations, not just single turns
+- If alignment degrades with turn count, safety guarantees established in short-context evaluations may not hold
+- Understanding the degradation mechanism (regression to prior vs. other factors) informs how to build more robust alignment
+
+### Gap in Literature
+Prior work established that (a) alignment is superficial (5-8% of tokens, ~1.4% of neurons), (b) multi-turn performance degrades severely (39% average drop), and (c) alignment effects fade within single responses. **No prior work directly measured whether multi-turn aligned model outputs converge toward base model distributions over turns.**
+
+## 3. Data Construction
+
+### Experiment 1: Token Distribution Analysis
+
+**Models**:
+- Base: Qwen/Qwen2.5-7B (ungated, 7B parameters)
+- Instruct: Qwen/Qwen2.5-7B-Instruct (same family, instruction-tuned)
+
+**Conversation Prefixes**: 3 diverse topics (travel planning, learning programming, cooking), each with 12 turns of natural dialogue. Turns are pre-written to ensure consistency across conditions.
+
+**Probe Prompts**: 8 simple factual/creative questions presented after varying numbers of conversation turns (0, 1, 2, 3, 5, 7, 10, 12).
+
+**Total measurements**: 192 (multi-turn) + 192 (CONCAT control) = 384
+
+### Experiment 2: Behavioral Alignment Probes
+
+**Model**: GPT-4.1-mini via OpenAI API (temperature=0.0)
+
+**Filler Conversations**: 2 topics × 12 turns each of benign dialogue
+
+**Probe Types**: Safety refusal (8 probes), Instruction compliance (8 probes), Persona maintenance (4 probes)
+
+**Turn positions tested**: 0, 2, 4, 6, 8, 10, 12
+
+### Experiment 2b: Extended Behavioral Probes
+
+**Models**: GPT-4.1-mini and GPT-4.1-nano via OpenAI API
+
+**Extended Filler**: 24 turns of diverse conversation topics
+
+**Probe Types**:
+- Word limit compliance (30-word limit instruction, 8 probes)
+- Uppercase format compliance (ALL CAPS instruction, 4 probes)
+- Subtle safety (nuanced/contextualized harmful requests, 6 probes)
+
+**Turn positions tested**: 0, 3, 6, 10, 15, 20, 24
+
+### Data Quality
+- All API calls returned successfully (0% error rate)
+- Local model computations used float32 for numerical stability
+- Reproducibility ensured via fixed random seed (42) and temperature=0.0
+
+## 4. Experiment Description
+
+### Methodology
+
+#### High-Level Approach
+We measured alignment at two levels: (1) **token distribution** — comparing next-token probability distributions between base and instruct models given the same conversation context, and (2) **behavioral** — testing whether alignment-specific behaviors (safety, formatting, persona) degrade with conversation depth.
+
+#### Why This Method?
+- Token distribution analysis is the most direct test of &#34;regression to prior&#34; — if KL(instruct||base) decreases, the instruct model is literally becoming more base-like
+- Behavioral probes test the practical consequences of any regression
+- Using both local models and API models provides convergent evidence across different model families
+- CONCAT control isolates the effect of multi-turn format from information accumulation
+
+### Implementation Details
+
+#### Tools and Libraries
+| Library | Version | Purpose |
+|---------|---------|---------|
+| PyTorch | 2.10.0+cu128 | GPU computation |
+| Transformers | 5.3.0 | Model loading |
+| OpenAI | latest | API calls |
+| SciPy | latest | Statistical tests |
+| Matplotlib/Seaborn | latest | Visualization |
+
+#### Hardware
+- 4× NVIDIA RTX A6000 (49GB each)
+- Models loaded on separate GPUs (base on cuda:2, instruct on cuda:0)
+
+#### Hyperparameters
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| Temperature | 0.0 | Deterministic output for reproducibility |
+| Max context | 3072 tokens | Sufficient for 12-turn conversations |
+| Random seed | 42 | Standard reproducibility seed |
+| KL epsilon | 1e-10 | Numerical stability in divergence computation |
+
+### Raw Results
+
+#### Experiment 1: KL Divergence by Turn Count
+
+| Turns | KL(Instruct‖Base) Mean±SD | JS Divergence | Top-100 Overlap |
+|-------|---------------------------|---------------|-----------------|
+| 0     | 8.36 ± 0.99               | 0.689 ± 0.003 | 0.051 ± 0.023   |
+| 1     | 9.32 ± 1.29               | 0.690 ± 0.004 | 0.062 ± 0.026   |
+| 2     | 9.59 ± 1.40               | 0.690 ± 0.005 | 0.054 ± 0.026   |
+| 3     | 9.36 ± 1.38               | 0.690 ± 0.005 | 0.055 ± 0.027   |
+| 5     | 9.35 ± 1.42               | 0.690 ± 0.005 | 0.055 ± 0.025   |
+| 7     | 9.32 ± 1.45               | 0.690 ± 0.005 | 0.055 ± 0.025   |
+| 10    | 9.31 ± 1.45               | 0.690 ± 0.005 | 0.056 ± 0.025   |
+| 12    | 9.16 ± 1.41               | 0.690 ± 0.005 | 0.055 ± 0.026   |
+
+#### Multi-Turn vs CONCAT Control (KL Divergence)
+
+| Turns | Multi-Turn KL | CONCAT KL | Delta | t-test p |
+|-------|---------------|-----------|-------|----------|
+| 0     | 8.36          | 4.94      | 3.42  | &lt;0.0001  |
+| 2     | 9.59          | 6.51      | 3.08  | &lt;0.0001  |
+| 5     | 9.35          | 6.12      | 3.22  | &lt;0.0001  |
+| 10    | 9.31          | 5.99      | 3.32  | &lt;0.0001  |
+| 12    | 9.16          | 5.87      | 3.28  | &lt;0.0001  |
+
+#### Experiment 2: Behavioral Probes (GPT-4.1-mini, 0-12 turns)
+
+| Turn | Safety Refusal | Instruction Compliance | Persona Maintenance |
+|------|---------------|------------------------|---------------------|
+| 0    | 1.000         | 1.000                  | 0.938               |
+| 4    | 1.000         | 1.000                  | 1.000               |
+| 8    | 1.000         | 1.000                  | 0.938               |
+| 12   | 1.000         | 1.000                  | 0.875               |
+
+#### Experiment 2b: Extended Probes (0-24 turns)
+
+**Uppercase Format Compliance** (most significant degradation):
+
+| Turns | GPT-4.1-mini | GPT-4.1-nano |
+|-------|-------------|-------------|
+| 0     | 1.00        | 1.00        |
+| 3     | 1.00        | 1.00        |
+| 6     | 1.00        | 1.00        |
+| 10    | 1.00        | 1.00        |
+| 15    | 1.00        | 0.50        |
+| 20    | 0.50        | 0.50        |
+| 24    | 0.25        | 0.50        |
+
+**Word Limit Compliance (30-word limit)**:
+
+| Turns | Mini Score | Mini Avg Words | Nano Score | Nano Avg Words |
+|-------|-----------|----------------|-----------|----------------|
+| 0     | 1.00      | 24.5           | 1.00      | 20.8           |
+| 6     | 1.00      | 29.9           | 1.00      | 27.5           |
+| 15    | 0.88      | 34.6           | 0.94      | 31.5           |
+| 24    | 0.81      | 34.8           | 1.00      | 31.5           |
+
+### Statistical Analysis
+
+| Probe Type | Model | Slope | R² | p-value | Cohen&#39;s d |
+|------------|-------|-------|----|---------|-----------|
+| KL divergence (all turns) | Qwen2.5-7B | +0.021 | 0.004 | 0.400 | -0.67 |
+| KL divergence (turns 2-12) | Qwen2.5-7B | -0.030 | 0.006 | 0.355 | — |
+| CONCAT KL (turns 2-12) | Qwen2.5-7B | -0.054 | 0.030 | **0.037** | — |
+| Uppercase format | GPT-4.1-mini | -0.030 | 0.404 | **&lt;0.001** | 2.45 |
+| Uppercase format | GPT-4.1-nano | -0.027 | 0.291 | **0.003** | 1.41 |
+| Word limit | GPT-4.1-mini | -0.013 | 0.293 | **&lt;0.001** | 1.10 |
+| Word limit | GPT-4.1-nano | -0.002 | 0.022 | 0.276 | 0.00 |
+| Subtle safety | GPT-4.1-mini | -0.004 | 0.017 | 0.416 | 0.15 |
+| Subtle safety | GPT-4.1-nano | +0.005 | 0.023 | 0.343 | -0.14 |
+| Safety refusal | GPT-4.1-mini | 0.000 | — | — | 0.00 |
+
+## 5. Result Analysis
+
+### Key Findings
+
+**Finding 1: Formatting instruction compliance degrades significantly over 15-24 turns.**
+Uppercase formatting compliance drops from 100% to 25% for GPT-4.1-mini (p&lt;0.001, d=2.45) and to 50% for GPT-4.1-nano (p=0.003, d=1.41). Word limit compliance also degrades significantly for GPT-4.1-mini (p&lt;0.001, d=1.10). This is the strongest evidence for alignment regression in our experiments.
+
+**Finding 2: Safety alignment is robust through 24 turns.**
+Neither direct safety refusals (perfect 1.0 through 12 turns) nor subtle safety probes (no significant trend through 24 turns, p&gt;0.3) show degradation. This contrasts sharply with formatting degradation.
+
+**Finding 3: Token distribution shows a two-phase pattern — activation then subtle regression.**
+KL(instruct||base) increases from 8.36 (turn 0) to 9.59 (turn 2) as the chat format activates alignment signals, then gradually decreases to 9.16 by turn 12. The declining phase (turns 2-12, slope=-0.030) trends in the predicted direction but is not statistically significant (p=0.36).
+
+**Finding 4: Multi-turn format itself amplifies instruct-base divergence.**
+Multi-turn conversations produce KL ~3.1 units higher than CONCAT equivalents (p&lt;0.001 at all turns). The turn structure itself — not just context accumulation — makes the instruct model behave more differently from the base model. This is an unexpected finding.
+
+**Finding 5: The degradation threshold appears to be around 10-15 turns.**
+Across all behavioral probes, alignment is maintained perfectly through 10 turns but begins degrading between turns 10-15. This is consistent with alignment training data being predominantly short conversations (typically 1-5 turns).
+
+### Hypothesis Testing
+
+**H1 (Token Distribution Convergence): Not supported.** Overall KL does not decrease monotonically across all turns. The turns 2-12 declining trend is consistent with the hypothesis direction but not statistically significant. However, the CONCAT control does show a significant decline (p=0.037), suggesting the regression-to-prior mechanism may be present but masked by the turn-structure activation effect.
+
+**H2 (Alignment Behavior Degradation): Partially supported.** Superficial alignment behaviors (formatting, style) degrade significantly. Deep alignment (safety) does not degrade within 24 turns.
+
+**H3 (Early-Turn Anchoring): Supported.** Alignment behaviors are maintained perfectly through the first 10 turns and begin degrading at turns 10-15, consistent with alignment training data being concentrated in short conversations.
+
+### Surprises and Insights
+
+1. **Multi-turn format *increases* instruct-base divergence** — this was unexpected. The chat template and turn markers seem to activate alignment signals more strongly than a single-turn context. This means the &#34;regression to prior&#34; is competing against a &#34;format activation&#34; effect.
+
+2. **Different alignment layers have different durability** — formatting instructions are fragile (degrade by turn 15), while safety alignment is robust (maintained at turn 24). This is consistent with the superficial alignment hypothesis: formatting is the shallowest layer (~5-8% of tokens) and safety is deeper (protected by ~1.4% of specialized neurons).
+
+3. **GPT-4.1-nano is sometimes *more* robust than GPT-4.1-mini** — nano maintained better word limit compliance at 24 turns (1.00 vs 0.81). This could be because smaller models are more tightly optimized or because their shorter context windows reduce interference.
+
+### Limitations
+
+1. **Limited model coverage**: We tested one local model family (Qwen2.5-7B) and two API models (GPT-4.1-mini/nano). Results may differ for other architectures.
+
+2. **Synthetic conversations**: Filler conversations were pre-written. Real conversations have more varied and potentially adversarial content.
+
+3. **Maximum 24 turns**: Real-world conversations can be much longer. The 10-15 turn degradation threshold might shift with different conversation content.
+
+4. **Token distribution analysis used only first-token prediction**: Alignment effects may manifest more strongly over sequences of tokens rather than single next-token distributions.
+
+5. **Confound: context length vs. turn count**: While the CONCAT control partially addresses this, we cannot fully separate turn-count effects from context-length effects since longer conversations always have more tokens.
+
+6. **Scoring limitations**: Behavioral probe scoring uses heuristics and LLM-as-judge, which may miss subtle degradation or introduce systematic bias.
+
+7. **Small sample sizes for some probes**: Uppercase format had only 4 probes per condition, limiting statistical power for individual comparisons.
+
+## 6. Conclusions
+
+### Summary
+Multi-turn conversations do cause alignment degradation, but the pattern is more nuanced than simple &#34;regression to prior.&#34; Superficial alignment behaviors (formatting, style instructions) degrade significantly after 10-15 turns, consistent with the superficial alignment hypothesis. Safety alignment, however, remains robust through at least 24 turns in frontier models. Token-level analysis reveals a competing two-phase dynamic: multi-turn format initially strengthens alignment activation, which then gradually weakens — but this weakening was not statistically significant in our 12-turn window.
+
+### Implications
+- **For alignment researchers**: Different alignment behaviors sit at different &#34;depths&#34; and have different vulnerability profiles. Formatting and style instructions should be considered particularly fragile in multi-turn settings.
+- **For practitioners**: System-level formatting instructions (e.g., &#34;always respond in bullet points&#34;) should be periodically re-injected in long conversations. Safety alignment is more durable but should still be monitored.
+- **For the hypothesis**: The regression-to-prior mechanism is likely one contributor to multi-turn degradation, particularly for superficial alignment, but it coexists with other mechanisms (attention dilution, instruction drift, format activation effects).
+
+### Confidence in Findings
+- **High confidence**: Formatting instruction degradation at 15-24 turns (large effect sizes, p&lt;0.001)
+- **High confidence**: Safety robustness through 24 turns (consistent across models and probe types)
+- **Moderate confidence**: Two-phase KL pattern (consistent across topics, but individual probe variance is high)
+- **Low confidence**: Whether the declining KL trend continues beyond 12 turns (not enough data)
+
+## 7. Next Steps
+
+### Immediate Follow-ups
+1. **Extend to longer conversations (50-100+ turns)** — the 10-15 turn degradation threshold needs to be mapped more precisely
+2. **Test with open-weight models where base variants are available** (Llama-3-70B base vs. instruct, when accessible) — larger models may show different patterns
+3. **Adversarial filler conversations** — test whether filler content that subtly challenges alignment accelerates degradation
+
+### Alternative Approaches
+- **Mechanistic interpretability**: Probe attention patterns to see if alignment-critical attention heads become less active at later turns
+- **Activation analysis**: Compare instruct model hidden states to base model hidden states at each turn to find the layer-level source of convergence
+- **Natural conversation data**: Use WildChat-1M or LMSYS-Chat-1M to measure alignment markers in real conversations
+
+### Open Questions
+1. Is the format activation effect (multi-turn &gt; CONCAT KL) a desirable property or an artifact?
+2. Does safety alignment eventually degrade at 50+ turns, or is it fundamentally more robust?
+3. Can periodic system message re-injection fully prevent formatting degradation?
+4. How does the degradation pattern differ across languages and cultural contexts?
+
+## References
+
+### Papers
+1. Laban et al. (2025). &#34;LLMs Get Lost In Multi-Turn Conversation.&#34; arXiv:2505.06120.
+2. Lin et al. (2023). &#34;The Unlocking Spell on Base LLMs: Rethinking Alignment via In-Context Learning.&#34; ICLR 2024.
+3. Li &amp; Kim (2024). &#34;Superficial Safety Alignment Hypothesis.&#34; ICLR 2026.
+4. Myung (2026). &#34;Quantifying Conversational Reliability under Multi-Turn Interaction.&#34; AAAI 2026.
+5. Sirdeshmukh et al. (2025). &#34;MultiChallenge: A Realistic Multi-Turn Benchmark.&#34; arXiv:2501.17399.
+6. Vergara-Browne et al. (2026). &#34;Operationalising the Superficial Alignment Hypothesis.&#34; arXiv:2602.15829.
+
+### Datasets
+- Microsoft/lost_in_conversation (HuggingFace)
+- MultiChallenge (GitHub)
+- MT-Bench (HuggingFace)
+
+### Tools
+- Qwen/Qwen2.5-7B and Qwen2.5-7B-Instruct (HuggingFace)
+- OpenAI GPT-4.1-mini and GPT-4.1-nano APIs
+- PyTorch 2.10.0, Transformers 5.3.0
+
+
+════════════════════════════════════════════════════════════════════════════════
+                            RESEARCH PLAN
+════════════════════════════════════════════════════════════════════════════════
+
+# Research Plan: Do Multi-Turn Conversations Regress to the Prior?
+
+## Motivation &amp; Novelty Assessment
+
+### Why This Research Matters
+Current alignment techniques (SFT, RLHF, DPO) are validated primarily in single-turn or short multi-turn settings, yet real-world deployment involves extended conversations. If alignment effects systematically diminish over turns—regressing toward the base model&#39;s pre-training distribution—this has critical implications for safety, reliability, and the design of alignment training pipelines. Understanding this degradation mechanism is essential for building trustworthy AI systems.
+
+### Gap in Existing Work
+The literature establishes three key facts in isolation:
+1. **Alignment is superficial**: Only 5-8% of tokens are affected by alignment tuning (URIAL, Lin et al. 2023), and safety localizes to ~1.4% of neurons (SSAH, Li &amp; Kim 2024).
+2. **Multi-turn performance degrades severely**: 39% average performance drop in multi-turn settings (Lost in Conversation, Laban et al. 2025), with instruction retention plummeting.
+3. **Alignment effects fade within responses**: KL divergence between base and aligned models decreases monotonically over token positions within a single response.
+
+**No paper has directly measured whether aligned model outputs become more similar to base model outputs as conversation turn count increases.** This is the critical missing link: connecting the superficial alignment hypothesis to multi-turn degradation by showing that the degradation mechanism is specifically regression toward the base prior.
+
+### Our Novel Contribution
+We directly test whether multi-turn degradation is explained by regression to the base model prior, using two complementary approaches:
+1. **Token-level distribution analysis** across turns using local models with both base and instruct variants
+2. **Behavioral alignment probes** measuring alignment-specific behaviors at different conversation depths via API
+
+### Experiment Justification
+- **Experiment 1 (Token Distribution Analysis)**: Directly measures KL divergence between instruct and base model output distributions at each turn. This is the most direct possible test of &#34;regression to prior&#34; — if KL(instruct||base) decreases over turns, the instruct model is literally becoming more like the base model.
+- **Experiment 2 (Behavioral Alignment Probes)**: Tests whether alignment-specific behaviors (safety refusal, instruction compliance, response formatting) degrade at later turn positions in frontier models. This captures the practical consequences of regression to prior.
+
+## Research Question
+In extended multi-turn conversations, do aligned LLMs produce outputs that become progressively more similar to their base (pre-training) model counterparts, indicating that alignment training effects diminish with conversation depth?
+
+## Hypothesis Decomposition
+
+### H1: Token Distribution Convergence
+As turn count increases, the KL divergence between the instruct model&#39;s next-token distribution and the base model&#39;s next-token distribution will decrease, indicating the instruct model&#39;s outputs are converging toward the base prior.
+
+### H2: Alignment Behavior Degradation
+Alignment-specific behaviors (safety refusals, instruction following, formatting compliance) will show systematic degradation at later turn positions compared to earlier turn positions.
+
+### H3: Early-Turn Anchoring
+The strongest alignment effects will be concentrated in turns 1-3, with diminishing alignment signal thereafter — consistent with alignment training data being predominantly short conversations.
+
+## Proposed Methodology
+
+### Approach
+Two complementary experiments targeting different levels of analysis:
+
+**Experiment 1: Token Distribution Analysis (Local Models)**
+- Models: Llama-3-8B (base) vs Llama-3-8B-Instruct
+- Method: Construct multi-turn conversation prefixes of varying lengths (1, 3, 5, 8, 12 turns). At each depth, present standardized probe prompts and measure the next-token probability distributions from both base and instruct models.
+- Metric: KL divergence, Jensen-Shannon divergence, top-k token overlap between instruct and base distributions.
+- Controls: (a) Single-turn baseline, (b) Same content concatenated (no turn structure), (c) Random conversation content vs. coherent conversation.
+
+**Experiment 2: Behavioral Alignment Probes (API)**
+- Models: GPT-4.1-mini via OpenAI API
+- Method: Embed standardized probe questions at different turn positions within synthetic multi-turn conversations. Measure alignment-specific responses.
+- Probe types:
+  - Safety: Requests that aligned models should refuse
+  - Instruction compliance: Following formatting instructions from turn 1
+  - Helpfulness markers: Quality of assistance
+- Controls: Same probes in single-turn (turn 1) as baseline.
+
+### Experimental Steps
+1. Download and load Llama-3-8B and Llama-3-8B-Instruct models
+2. Generate multi-turn conversation prefixes using the instruct model
+3. At each turn depth, compute next-token distributions from both models given the same conversation prefix
+4. Calculate divergence metrics across turn positions
+5. Design behavioral probe battery for API experiment
+6. Run probes at positions 1, 3, 5, 8, 12 in synthetic conversations via GPT-4.1-mini
+7. Score alignment behaviors using automated classifiers
+8. Statistical analysis: regression of divergence/behavior scores on turn position
+
+### Baselines
+1. **Turn 1 (single-turn)**: Maximum alignment effect — the ceiling
+2. **Concatenated input**: All conversation content in one message (controls for information accumulation)
+3. **Shuffled turns**: Same content but shuffled order (controls for specific conversation dynamics)
+
+### Evaluation Metrics
+- **KL Divergence** (D_KL(P_instruct || P_base)): Primary metric for Experiment 1. Lower = more similar to base.
+- **Jensen-Shannon Divergence**: Symmetric version for robustness.
+- **Top-k Token Overlap**: Fraction of top-k tokens shared between instruct and base distributions.
+- **Safety Refusal Rate**: Fraction of harmful requests properly refused (Experiment 2).
+- **Instruction Compliance Score**: Whether formatting/style instructions from turn 1 are maintained.
+
+### Statistical Analysis Plan
+- **Primary test**: Linear regression of divergence metrics on turn number, with random effects for probe type.
+- **Significance level**: α = 0.05, with Bonferroni correction for multiple comparisons.
+- **Effect size**: Report Cohen&#39;s d and R² for regression models.
+- **Bootstrap confidence intervals** (1000 iterations) for all point estimates.
+
+## Expected Outcomes
+- **If hypothesis supported**: KL divergence decreases monotonically (or at least significantly) with turn number. Safety refusal rates and instruction compliance decrease at later turns. Effect is stronger for alignment-specific behaviors than for general capability.
+- **If hypothesis refuted**: No systematic relationship between turn number and base-model similarity. Degradation explained by other factors (attention dilution, context window effects, etc.).
+
+## Timeline and Milestones
+1. Environment setup + model loading: 15 min
+2. Experiment 1 implementation + execution: 90 min
+3. Experiment 2 implementation + execution: 60 min
+4. Analysis + visualization: 45 min
+5. Documentation: 30 min
+
+## Potential Challenges
+1. **Memory constraints**: Llama-3-8B needs ~16GB. With 4x A6000 (49GB each), this is fine.
+2. **Conversation generation quality**: Synthetic conversations may not reflect real patterns. Mitigation: use varied conversation templates and real conversation snippets from WildChat.
+3. **API costs**: GPT-4.1-mini is affordable. Budget ~$10-20 for sufficient sample size.
+4. **Confound: context length vs turn count**: Longer conversations have more tokens regardless of turns. Mitigation: CONCAT control condition.
+
+## Success Criteria
+1. Statistically significant (p &lt; 0.05) negative slope in KL divergence vs. turn number
+2. At least 2 of 3 behavioral probe types showing degradation with turn number
+3. Effect is robust to conversation content variation (at least 2 different conversation types)
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          LITERATURE REVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+# Literature Review: Do Multi-Turn Conversations Regress to the Prior?
+
+## Research Area Overview
+
+This review examines whether large language models (LLMs) regress toward their base pre-training distribution during extended multi-turn conversations, with alignment training effects (safety, instruction-following, formatting) diminishing after the first few turns. The hypothesis sits at the intersection of three active research areas: (1) multi-turn conversation evaluation, (2) the superficial alignment hypothesis, and (3) alignment robustness/safety.
+
+Recent work provides converging evidence from multiple angles: alignment modifies only a thin layer of model behavior (affecting ~5-8% of output tokens and ~1.4% of neurons), multi-turn settings dramatically increase unreliability (39% average performance drop), and alignment effects concentrate at early token positions within each response, fading monotonically.
+
+---
+
+## Key Papers
+
+### Paper 1: LLMs Get Lost In Multi-Turn Conversation
+- **Authors**: Laban, Hayashi, Zhou, Neville (Microsoft Research &amp; Salesforce)
+- **Year**: 2025
+- **Source**: arXiv 2505.06120
+- **Key Contribution**: First large-scale study (200,000+ conversations, 15 LLMs, 6 tasks) demonstrating universal multi-turn degradation via &#34;sharding&#34; framework
+- **Methodology**: Transforms single-turn tasks into multi-turn by revealing requirements incrementally (&#34;shards&#34;). Compares FULL (single-turn), CONCAT (all shards at once), and SHARDED (multi-turn reveal) settings. Uses automated simulation with GPT-4o-mini as user.
+- **Datasets Used**: HumanEval, LiveCodeBench, Spider 1.0, BFCL V3, GSM8K, ToTTo, Summary of a Haystack
+- **Results**:
+  - Average 39% performance drop from FULL to SHARDED across all models
+  - CONCAT recovers 95.1% of FULL performance (degradation is format-specific, not content-specific)
+  - Aptitude drops only 16%; unreliability increases 112% (the problem is inconsistency, not inability)
+  - Even 2-turn conversations trigger the effect
+  - Reasoning models (o3, Deepseek-R1) show no advantage
+  - Early answer attempts score 30.9 avg; late attempts score 64.4
+  - Loss-of-middle-turns: 150% citation bias toward first/last turns vs. middle
+- **Code Available**: GitHub `Microsoft/lost_in_conversation`, HuggingFace `Microsoft/lost_in_conversation`
+- **Relevance**: Most directly relevant paper. Demonstrates that multi-turn format induces catastrophic unreliability. The early-turn commitment mechanism (models anchor to first-turn &#34;prior&#34; and fail to update) directly supports our hypothesis. CONCAT control proves degradation is about sequential disclosure, not information content.
+
+### Paper 2: The Unlocking Spell on Base LLMs (URIAL)
+- **Authors**: Lin, Ravichander, Lu, Dziri, Sclar, Chandu, Bhagavatula, Choi (Allen AI)
+- **Year**: 2023 (published ICLR 2024)
+- **Source**: arXiv 2312.01552
+- **Key Contribution**: Quantitative evidence that alignment is superficial — only 5-8% of tokens are affected by alignment tuning, and these are predominantly stylistic
+- **Methodology**: Token distribution shift analysis comparing base vs. aligned model outputs at each token position. Introduces URIAL: tuning-free alignment via 3 in-context examples.
+- **Datasets Used**: just-eval-instruct (1,000 examples from 9 sources), AlpacaEval, MT-Bench, HH-RLHF-redteam, MaliciousInstruct
+- **Results**:
+  - 77.7% of aligned model tokens are identical to base model&#39;s top choice (Llama-2)
+  - 92.2% within top-3 of base distribution; only 7.8% genuinely shifted
+  - Shifted tokens are stylistic: &#34;Thank&#34;, &#34;Hello&#34;, &#34;sorry&#34;, &#34;cannot&#34;, discourse markers
+  - KL divergence between base and aligned decreases monotonically over token position
+  - URIAL on Mistral-7b (4.63) surpasses Mistral-Instruct SFT (4.44)
+  - URIAL on Llama-2-70b (4.74) surpasses Llama-2-70b-chat RLHF (4.67)
+- **Code Available**: https://allenai.github.io/re-align, GitHub `Re-Align/URIAL`
+- **Relevance**: Provides the mechanistic foundation for our hypothesis. Alignment effects are strongest at early tokens and fade monotonically. In multi-turn conversations, the alignment signal (concentrated in first few tokens of each response) is diluted by accumulated context from the base distribution. &#34;The conversation ability of aligned LLMs might be largely from base models themselves.&#34;
+
+### Paper 3: Superficial Safety Alignment Hypothesis (SSAH)
+- **Authors**: Li, Kim (NC State)
+- **Year**: 2024 (published ICLR 2026)
+- **Source**: arXiv 2410.10862
+- **Key Contribution**: Safety alignment localizes to ~1.4% of neurons (Safety Critical Units), and these are fragile — easily reassigned during fine-tuning
+- **Methodology**: Neuron-level probing, attribute-based pruning, freezing interventions on aligned models
+- **Datasets Used**: AdvBench, HEx-PHI, Alpaca, Dolly, HarmBench
+- **Results**:
+  - SCUs: 1.3% (Llama-2), 1.4% (Llama-3), 2% (Mistral)
+  - Pruning SCUs: ASR jumps from 10% → 66% (Llama-2), 15.5% → 86.5% (Llama-3)
+  - During fine-tuning, 65.7% of SCUs get reassigned
+  - &#34;Current alignment can only hold the correct reasoning direction in a limited generated tokens&#34;
+- **Code Available**: https://ssa-h.github.io/
+- **Relevance**: Explains WHY alignment is fragile. If safety depends on 1.4% of neurons whose influence extends only over initial tokens, multi-turn context accumulation could easily overwhelm this thin safety layer.
+
+### Paper 4: Quantifying Conversational Reliability under Multi-Turn Interaction
+- **Authors**: Myung (Samsung SDS)
+- **Year**: 2026 (AAAI 2026)
+- **Source**: arXiv 2603.01423
+- **Key Contribution**: Controlled measurement of multi-turn reliability degradation across commercial and open-source models
+- **Methodology**: Three synthetic tasks (instruction following, tool selection, entity extraction) with matched single/multi-turn variants
+- **Results**:
+  - Instruction Following: GPT-4o 96% → 63%, GPT-4o-mini 93% → 24%
+  - Tool Selection: Qwen3-32B 100% → 47%, Ministral-8B 99% → 37%
+  - Degradation driven by instruction drift and contextual overwriting, not raw length
+- **Relevance**: Confirms systematic degradation. Key nuance: specific distractors matter more than turn count alone.
+
+### Paper 5: MultiChallenge Benchmark
+- **Authors**: Sirdeshmukh et al. (Scale AI)
+- **Year**: 2025
+- **Source**: arXiv 2501.17399
+- **Key Contribution**: Multi-turn benchmark where all frontier models score below 50%
+- **Results**:
+  - Claude 3.5 Sonnet: 41.4% avg (best); Instruction Retention: 58.6%
+  - GPT-4o: 12.5% avg
+  - o1-preview: 37.2% avg
+- **Code Available**: GitHub `ekwinox117/multi-challenge`
+- **Relevance**: Instruction Retention category directly tests whether turn-1 instructions survive through conversation. Results show severe degradation even for frontier models.
+
+### Paper 6: Operationalising the Superficial Alignment Hypothesis via Task Complexity
+- **Authors**: Vergara-Browne et al. (Mila/McGill/ETH Zurich/Edinburgh/Amsterdam)
+- **Year**: 2026
+- **Source**: arXiv 2602.15829
+- **Key Contribution**: Formal definition of alignment superficiality via Kolmogorov complexity — post-training adds kilobytes of information atop terabytes of pre-training
+- **Results**:
+  - Post-training collapses complexity curves: strong performance accessible with &lt;1 KB additional program length
+  - Pre-trained models already contain the knowledge; post-training merely surfaces it
+- **Relevance**: Theoretical grounding for why alignment is fragile — informationally shallow signals are easily overwhelmed.
+
+### Paper 7: Multi-Turn RLHF Policy Optimization
+- **Authors**: arXiv 2410.04612
+- **Year**: 2024
+- **Key Contribution**: Shows applying single-turn RLHF to multi-turn settings introduces covariate shift
+- **Relevance**: Alignment training itself is mismatched to multi-turn deployment.
+
+### Paper 8: Multi-Turn Jailbreaking via Lexical Anchor Tree Search
+- **Authors**: arXiv 2601.02670
+- **Year**: 2026
+- **Key Contribution**: Multi-turn attacks achieve 97% success rate by gradually shifting context
+- **Relevance**: Demonstrates that safety alignment can be systematically eroded through multi-turn interaction, consistent with regression-to-prior mechanism.
+
+---
+
+## Common Methodologies
+
+- **Single-turn vs. Multi-turn comparison**: Used in Papers 1, 4, 5 — the gold standard for measuring degradation
+- **Token distribution shift analysis**: Paper 2 — directly compares base and aligned model outputs
+- **Neuron-level probing/pruning**: Paper 3 — identifies which components encode alignment
+- **Kolmogorov complexity estimation**: Paper 6 — formal framework for measuring alignment depth
+- **Automated conversation simulation**: Papers 1, 4 — GPT-4o/GPT-5 as user simulators
+- **LLM-as-judge evaluation**: Papers 1, 2, 5 — GPT-4 for quality assessment
+
+## Standard Baselines
+
+- **Single-turn performance**: The universal baseline — same task in one turn
+- **CONCAT/aggregated input**: All information provided at once (Paper 1&#39;s key control)
+- **Base model + ICL**: URIAL-style in-context alignment (Paper 2)
+- **Various model sizes**: Small (8B), medium (13B-70B), frontier (GPT-4o, Claude, Gemini)
+
+## Evaluation Metrics
+
+- **Task accuracy** (exact match, functional correctness): Papers 1, 4, 5
+- **Aptitude vs. Unreliability decomposition**: Paper 1 (90th percentile vs. interpercentile range)
+- **Attack Success Rate (ASR)**: Paper 3 (safety evaluation)
+- **Token distribution shift metrics**: Paper 2 (KL divergence, base rank, base probability)
+- **Multi-aspect scoring** (helpfulness, safety, factuality): Paper 2 (just-eval)
+
+## Datasets in the Literature
+
+| Dataset | Used In | Task | Availability |
+|---------|---------|------|-------------|
+| Microsoft/lost_in_conversation | Paper 1 | Multi-turn sharded tasks | HuggingFace |
+| MultiChallenge | Paper 5 | Multi-turn challenge benchmark | GitHub |
+| MT-Bench | Papers 2, 3 | Multi-turn evaluation | HuggingFace |
+| AdvBench / HarmBench | Paper 3 | Safety evaluation | Available |
+| just-eval-instruct | Paper 2 | Alignment evaluation | Available |
+| WildChat-1M | — | Real multi-turn conversations | HuggingFace (gated) |
+| LMSYS-Chat-1M | — | Real multi-turn conversations | HuggingFace (gated) |
+| Anthropic Sycophancy Evals | — | Sycophancy/alignment testing | HuggingFace |
+
+---
+
+## Gaps and Opportunities
+
+1. **No direct measurement of base-model similarity across turns**: No paper explicitly computes how similar multi-turn responses become to base model outputs as turn count increases. This is the core experiment our hypothesis requires.
+
+2. **Safety-specific multi-turn degradation is understudied**: Papers focus on task performance (accuracy) or safety attacks (jailbreaks) but not on gradual, natural safety erosion without adversarial intent.
+
+3. **Token-level analysis extended to multi-turn**: Paper 2&#39;s distribution shift analysis is single-turn only. Extending it across turns would directly test our hypothesis.
+
+4. **Role of conversation content vs. length**: Papers 1 and 4 suggest content matters more than raw turn count, but this isn&#39;t fully disentangled.
+
+5. **Comparing aligned vs. base model multi-turn trajectories**: No study directly compares how base and aligned models diverge (or converge) over the course of a conversation.
+
+---
+
+## Recommendations for Our Experiment
+
+### Recommended Datasets
+1. **Microsoft/lost_in_conversation** — Primary dataset. Already has single-turn vs. multi-turn comparisons across 6 tasks and 15 models. We can extend by comparing against base model outputs.
+2. **MultiChallenge** — Tests instruction retention across turns. Good for measuring alignment-specific degradation.
+3. **MT-Bench** — Standard 2-turn evaluation with human judgments for calibration.
+4. **Anthropic Sycophancy Evals** — Tests whether models abandon aligned behavior under social pressure (a form of regression to prior).
+
+### Recommended Baselines
+1. **Base model performance** (e.g., Llama-2-7b, Mistral-7b) on same tasks as aligned counterparts
+2. **URIAL (in-context alignment)** as a control for alignment without fine-tuning
+3. **Single-turn aligned model** as the reference point for full alignment effect
+4. **CONCAT setting** (all information at once) to control for information content
+
+### Recommended Metrics
+1. **Token distribution divergence from base model** across turns (extending Paper 2&#39;s methodology)
+2. **Task accuracy per turn** (following Paper 1&#39;s sharding framework)
+3. **Aptitude vs. Unreliability decomposition** (Paper 1&#39;s framework)
+4. **Safety compliance rate per turn** (new metric for our hypothesis)
+5. **Instruction retention rate** (from MultiChallenge framework)
+
+### Methodological Considerations
+- Use the same model in both base and aligned variants (e.g., Llama-2-7b and Llama-2-7b-chat)
+- Control for information content using CONCAT-like settings
+- Distinguish between capability degradation and alignment-specific degradation
+- Consider that distractors and content type may matter more than raw turn count
+- Temperature control: Paper 1 shows T=0 doesn&#39;t fix multi-turn unreliability
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          PAPER REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+Generate a complete academic paper with the following structure:
+
+1. TITLE
+   - Clear, specific, informative
+   - Should convey main finding or contribution
+
+2. AUTHOR
+   - Use this exact author line in the \author{} block: Ari Holtzman and NeuriCo
+
+3. ABSTRACT (150-250 words)
+   - Problem statement
+   - Approach
+   - Key results
+   - Significance
+
+4. INTRODUCTION
+   - Research problem and motivation
+   - Gap in existing work
+   - Our contribution (be specific)
+   - Paper organization
+
+5. RELATED WORK
+   - Organized by theme/approach
+   - Position our work relative to prior work
+   - Cite papers from literature review
+
+6. METHODOLOGY
+   - Clear description of approach
+   - Experimental setup
+   - Datasets used
+   - Evaluation metrics
+   - Baselines
+
+7. RESULTS
+   - Present results with tables and figures
+   - Statistical analysis
+   - Comparison to baselines
+   - Ablation studies (if applicable)
+
+8. DISCUSSION
+   - Interpretation of results
+   - Limitations
+   - Broader implications
+
+9. CONCLUSION
+   - Summary of contributions
+   - Key findings
+   - Future work
+
+10. REFERENCES
+   - BibTeX format
+   - All cited papers
+
+════════════════════════════════════════════════════════════════════════════════
+                          OUTPUT FORMAT
+════════════════════════════════════════════════════════════════════════════════
+
+Create a MODULAR LaTeX project with the following directory structure:
+
+paper_draft/
+├── main.tex              # Main file that imports all sections
+├── references.bib        # BibTeX references
+├── sections/
+│   ├── abstract.tex      # Abstract content
+│   ├── introduction.tex  # Introduction section
+│   ├── related_work.tex  # Related work section
+│   ├── methodology.tex   # Methodology section
+│   ├── results.tex       # Results section
+│   ├── discussion.tex    # Discussion section
+│   └── conclusion.tex    # Conclusion section
+├── figures/              # Directory for any generated figures
+├── tables/               # Directory for complex standalone tables
+└── appendix/             # Directory for appendix sections (if needed)
+
+INSTRUCTIONS:
+1. First, create the directory structure above (mkdir -p paper_draft/sections paper_draft/figures paper_draft/tables paper_draft/appendix)
+2. Write main.tex using the EXACT preamble for NEURIPS:
+
+   \documentclass{article}
+   \usepackage[final]{neurips_2025}  % NEURIPS style (neurips_2025.sty is in paper_draft/)
+   \usepackage[hidelinks]{hyperref}  % REQUIRED: clickable links
+   \usepackage{booktabs}  % REQUIRED: professional tables
+   \usepackage{graphicx}
+   \usepackage{amsmath,amssymb}
+
+   % Import command files
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+   % Use this bibliography style:
+   \bibliographystyle{plainnat}
+
+   \author{Ari Holtzman and NeuriCo}
+
+   - Use \input{sections/...} to include each section
+   - Use \bibliography{references} for references
+3. Write each section file with COMPLETE content (no placeholders)
+4. Each section file should include its \section{} command
+5. Write references.bib with all citations in BibTeX format
+6. After writing all files, compile the paper:
+   cd paper_draft && pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex -interaction=nonstopmode main.tex && pdflatex -interaction=nonstopmode main.tex
+
+This modular structure allows humans to easily:
+- Edit individual sections without navigating a large file
+- Track changes per section
+- Reuse sections across different paper versions
+
+════════════════════════════════════════════════════════════════════════════════
+                          QUALITY REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+- Academic tone throughout
+- All claims must be supported by data from the experiment report
+- Proper citations using \cite{} commands
+- Clear figures and tables with proper captions
+- NO placeholder text - every section must have real content
+- The paper MUST compile without errors
+- If compilation fails, debug and fix the LaTeX errors
+
+════════════════════════════════════════════════════════════════════════════════
+                          LAB WRITING STYLE
+════════════════════════════════════════════════════════════════════════════════
+
+Follow these lab-specific conventions to match our paper style:
+
+1. LANGUAGE STYLE:
+   - Use active voice: "We propose", "We examine", "We focus on"
+   - Be direct and confident: "Our main question is...", "We hypothesize that..."
+   - State things clearly and simply - prefer plain language over jargon
+   - Use bold questions as paragraph organizers: {\bf what is X?}
+   - Include specific quantitative claims: "8.97% over baseline"
+   - Avoid fancy wording: "utilize" → "use", "facilitate" → "help"
+
+2. INTRODUCTION STRUCTURE:
+   - Engaging hook (get to the point quickly)
+   - Problem importance
+   - Gap identification
+   - Your approach with method figure reference
+   - Quantitative preview of results
+   - Contribution bullets (3-4 items, action verbs)
+
+3. CONTRIBUTION LISTS:
+   \begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+       \item We propose...
+       \item We conduct...
+       \item We complement...
+   \end{itemize}
+
+4. MODULAR COMMANDS STRUCTURE:
+   Command templates are pre-copied to paper_draft/commands/:
+   - math.tex: Math notation macros
+   - general.tex: Formatting macros
+   - macros.tex: Project-specific term definitions (customize this for your paper)
+
+   In main.tex, include:
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+5. REFERENCE CONVENTIONS:
+   Use reference macros from math.tex:
+   - \figref{fig:name} for "figure 1" (lowercase, in-sentence)
+   - \Figref{fig:name} for "Figure 1" (capitalized, start of sentence)
+   - \secref{sec:name} for "section 2"
+
+6. TEXT FORMATTING:
+   - Use \para{Header text} for bold paragraph headers
+   - Define method/dataset names with \textsc and \xspace:
+     \newcommand{\methodname}{\textsc{MethodName}\xspace}
+
+7. TABLE FORMATTING:
+   - Use booktabs package (no vertical lines)
+   - Use \resizebox{\textwidth}{!}{...} for wide tables
+   - Use @{} to remove padding at table edges
+   - Use \cmidrule(lr){x-y} for sub-headers
+   - Use \textsc{} for dataset/method names in headers
+   - Bold best results with {\bf ...}
+
+8. FIGURE FORMATTING:
+   - Use 0.32\textwidth for 3-column subfigures
+   - Use 0.95\linewidth for full-width figures
+   - Use \input{figures/legend} for shared legends
+   - Write self-contained captions explaining key observations
+
+9. RESULTS PRESENTATION:
+   - Define \increase and \decrease for colored arrows (green up, red down)
+   - Bold best results in tables
+   - Report confidence intervals when available
+
+10. ALGORITHM STYLING:
+    - Use algpseudocode with [noend]
+    - Use \triangleright for comments
+
+11. HYPERLINKS (REQUIRED):
+    - Always use \usepackage[hidelinks]{hyperref} or with colored links
+    - All citations, section refs, figure refs, table refs must be clickable
+    - This is essential for reader navigation
+
+════════════════════════════════════════════════════════════════════════════════
+                          WORKFLOW: REVIEW AND REFLECT
+════════════════════════════════════════════════════════════════════════════════
+
+Before calling finish, you MUST complete these review steps:
+
+1. REVIEW RESOURCES (at the start):
+   - Read .claude/skills/paper-writer/SKILL.md for detailed guidance
+   - Study templates/paper_writing/lab_style_guide.md for style conventions
+   - Browse paper_examples/ for formatting and language patterns
+
+2. SELF-REFLECTION (before finishing):
+   After writing all sections, review your work against these criteria:
+
+   LANGUAGE CHECK:
+   - [ ] Is the writing clear and jargon-free?
+   - [ ] Are claims specific with quantitative support?
+   - [ ] Is active voice used throughout?
+
+   FORMATTING CHECK:
+   - [ ] Does main.tex include \input{commands/math}, \input{commands/general}, \input{commands/macros}?
+   - [ ] Is hyperref package included for clickable references?
+   - [ ] Do tables use booktabs (no vertical lines)?
+   - [ ] Are best results bolded in tables?
+   - [ ] Are figures/tables properly captioned?
+
+   STRUCTURE CHECK:
+   - [ ] Does introduction follow: hook → importance → gap → approach → preview → contributions?
+   - [ ] Are contribution bullets specific with action verbs?
+   - [ ] Does the paper compile without errors?
+
+3. FIX ISSUES:
+   - Address any issues found in the self-reflection
+   - Re-compile and verify the PDF looks correct
+
+Only after completing this review should you consider the paper finished.

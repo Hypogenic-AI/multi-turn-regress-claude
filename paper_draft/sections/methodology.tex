@@ -1,0 +1,45 @@
+\section{Methodology}
+\label{sec:method}
+
+We design two complementary experiments: token-level distribution analysis with local models (\secref{sec:exp1}) and behavioral alignment probes via API (\secref{sec:exp2}). Together, these target both the mechanistic and the behavioral signatures of alignment regression.
+
+\subsection{Experiment 1: Token Distribution Analysis}
+\label{sec:exp1}
+
+\para{Models.} We use \qwenbase (7B parameters, base pre-trained) and \qweninst (instruction-tuned variant from the same family). Both models are loaded on separate GPUs (NVIDIA RTX A6000, 49\,GB) in float32 for numerical stability.
+
+\para{Conversation construction.} We construct multi-turn conversation prefixes spanning three diverse topics (travel planning, programming tutoring, and cooking assistance), each comprising 12 pre-written turns of natural dialogue. Turns are fixed across conditions to ensure consistency. At each conversation depth $t \in \{0, 1, 2, 3, 5, 7, 10, 12\}$, we present 8 standardized probe prompts---simple factual and creative questions---yielding 24 measurements per depth (8 probes $\times$ 3 topics).
+
+\para{Distribution measurement.} For each probe at each depth, we extract the full next-token probability distribution from both the base and instruct models given the identical conversation prefix. We compute three metrics:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=2pt]
+    \item \textbf{KL divergence} $\kldiv(P_{\text{instruct}} \| P_{\text{base}})$: our primary metric. A decrease over turns indicates the instruct model is becoming more similar to the base model.
+    \item \textbf{Jensen-Shannon divergence} $\jsDiv$: symmetric variant for robustness.
+    \item \textbf{Top-100 overlap}: fraction of top-100 tokens shared between instruct and base distributions.
+\end{itemize}
+
+\para{\concat control.} To disentangle the effect of multi-turn structure from information accumulation, we construct a \concat condition that presents the same conversational content as a single block of text without turn markers or chat template formatting. If regression to the prior is driven by context length rather than turn structure, the \concat condition should show the same pattern.
+
+\para{Statistical analysis.} We fit linear regressions of divergence metrics on turn number and report slopes, $R^2$, and $p$-values. We use paired $t$-tests to compare \multiturn and \concat conditions at each depth. All tests use $\alpha = 0.05$.
+
+\subsection{Experiment 2: Behavioral Alignment Probes}
+\label{sec:exp2}
+
+\para{Models.} We use \gptmini and \gptnano via the OpenAI API with temperature $= 0.0$ for deterministic outputs.
+
+\para{Experiment 2a (0--12 turns).} We embed standardized alignment probes at turn positions $t \in \{0, 2, 4, 6, 8, 10, 12\}$ within synthetic multi-turn conversations using 2 filler topics $\times$ 12 turns each. We test three probe categories:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=2pt]
+    \item \textbf{Safety refusal} (8 probes): requests that aligned models should refuse.
+    \item \textbf{Instruction compliance} (8 probes): adherence to formatting instructions from the system prompt.
+    \item \textbf{Persona maintenance} (4 probes): consistency of an assigned persona.
+\end{itemize}
+
+\para{Experiment 2b (0--24 turns).} We extend to 24 turns with diverse filler content and test more granular alignment behaviors at $t \in \{0, 3, 6, 10, 15, 20, 24\}$:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=2pt]
+    \item \textbf{Uppercase format compliance} (4 probes): adherence to an ``ALL CAPS'' system instruction.
+    \item \textbf{Word limit compliance} (8 probes): adherence to a 30-word limit system instruction.
+    \item \textbf{Subtle safety} (6 probes): responses to nuanced or contextualized harmful requests.
+\end{itemize}
+
+\para{Scoring.} Behavioral probes are scored as binary compliance (1 = aligned behavior maintained, 0 = degraded) using a combination of rule-based heuristics (e.g., character case ratio for uppercase, word count for limit compliance) and LLM-as-judge evaluation (for safety and persona probes). We report the mean compliance score at each turn position.
+
+\para{Statistical analysis.} For each probe type, we fit a linear regression of compliance score on turn number and report the slope, $R^2$, $p$-value, and Cohen's $d$ (comparing the first and last turn positions). We apply Bonferroni correction across probe types.

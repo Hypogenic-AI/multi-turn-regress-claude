@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "stages": {
+    "resource_finder": {
+      "success": true,
+      "completion_marker": "/workspaces/multi-turn-regress-claude/.resource_finder_complete",
+      "outputs": {
+        "literature_review": "/workspaces/multi-turn-regress-claude/literature_review.md",
+        "resources_catalog": "/workspaces/multi-turn-regress-claude/resources.md",
+        "papers_dir": "/workspaces/multi-turn-regress-claude/papers",
+        "datasets_dir": "/workspaces/multi-turn-regress-claude/datasets",
+        "code_dir": "/workspaces/multi-turn-regress-claude/code"
+      },
+      "log_file": "/workspaces/multi-turn-regress-claude/logs/resource_finder_claude.log",
+      "transcript_file": "/workspaces/multi-turn-regress-claude/logs/resource_finder_claude_transcript.jsonl",
+      "elapsed_time": 1941.613656759262
+    },
+    "experiment_runner": {
+      "success": true,
+      "return_code": 0,
+      "elapsed_time": 2021.0548965930939,
+      "log_file": "/workspaces/multi-turn-regress-claude/logs/execution_claude.log",
+      "transcript_file": "/workspaces/multi-turn-regress-claude/logs/execution_claude_transcript.jsonl"
+    }
+  },
+  "work_dir": "/workspaces/multi-turn-regress-claude"
+}

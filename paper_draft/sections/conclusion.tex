@@ -1,0 +1,10 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We investigated whether multi-turn conversations cause aligned language models to regress toward their base pre-training prior. Through token-level distribution analysis and behavioral alignment probes spanning up to 24 turns, we find that the answer depends on which aspect of alignment is measured.
+
+Superficial alignment behaviors---formatting constraints and style instructions---degrade significantly after 10--15 turns, with uppercase compliance dropping from 100\% to 25\% ($p < 0.001$, $d = 2.45$). Safety alignment, by contrast, remains robust through all turns tested. Token-level analysis reveals that multi-turn format initially strengthens alignment activation before a gradual decline sets in, and that conversation structure itself amplifies instruct--base divergence relative to concatenated equivalents.
+
+These findings support a depth-stratified view of alignment: different behaviors occupy different layers of the alignment stack and exhibit different vulnerability profiles. For practitioners, the implication is that system-level formatting instructions should be periodically reinforced in long conversations, while safety alignment can be expected to hold in conversations of moderate length. For alignment researchers, our results motivate targeted investigation into why safety training produces more durable behavioral changes than instruction-following training, and whether this durability extends to much longer interactions.
+
+\para{Future work.} Three directions are particularly promising. First, extending our analysis to 50--100+ turns would clarify whether safety alignment eventually degrades or is fundamentally more robust. Second, mechanistic interpretability methods---probing attention patterns and hidden state trajectories across turns---could reveal the computational substrate of the format-activation effect we observe. Third, testing whether periodic system message re-injection can fully prevent formatting degradation would have immediate practical value for deployed systems.

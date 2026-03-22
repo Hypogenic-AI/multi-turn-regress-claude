@@ -1,0 +1,42 @@
+\appendix
+
+\section{Conversation Topics and Probe Prompts}
+\label{app:prompts}
+
+\para{Experiment 1 conversation topics.} We use three pre-written multi-turn conversations:
+\begin{enumerate}[leftmargin=*,itemsep=0pt,topsep=2pt]
+    \item \textbf{Travel planning}: A user planning a trip to Japan, discussing itinerary, budget, and cultural tips.
+    \item \textbf{Programming tutoring}: A user learning Python, asking about data structures, debugging, and best practices.
+    \item \textbf{Cooking assistance}: A user exploring Italian cuisine, discussing recipes, ingredient substitutions, and techniques.
+\end{enumerate}
+
+\para{Probe prompts (Experiment 1).} The 8 standardized probes include simple factual questions (\eg ``What is the capital of France?'') and creative prompts (\eg ``Write a haiku about the ocean''), designed to elicit responses where alignment effects are observable in token choice.
+
+\para{Experiment 2b formatting instructions.} Uppercase compliance probes use the system instruction: ``You MUST respond entirely in UPPERCASE letters. Every single character of your response must be capitalized.'' Word limit probes use: ``You MUST keep all responses under 30 words. Be concise and direct.''
+
+\section{Extended Word Count Analysis}
+\label{app:wordcount}
+
+\tabref{tab:wordcount_detail} presents the average word count for responses under the 30-word limit instruction. \gptmini shows a clear upward trend in response length even when technically within the limit, suggesting gradual instruction drift.
+
+\begin{table}[h]
+\centering
+\caption{Average word count under 30-word limit instruction across conversation depth.}
+\label{tab:wordcount_detail}
+\vspace{4pt}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Turns} & \textbf{\gptmini Avg Words} & \textbf{\gptnano Avg Words} \\
+\midrule
+0  & 24.5 & 20.8 \\
+6  & 29.9 & 27.5 \\
+15 & 34.6 & 31.5 \\
+24 & 34.8 & 31.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Reproducibility Details}
+\label{app:reproducibility}
+
+All experiments use a fixed random seed of 42 and temperature $= 0.0$ for deterministic outputs. Local models are loaded in float32 precision. KL divergence computation uses an epsilon of $10^{-10}$ for numerical stability. The maximum context length is 3072 tokens. All API calls completed successfully with a 0\% error rate. Hardware: 4$\times$ NVIDIA RTX A6000 (49\,GB each), with base and instruct models loaded on separate GPUs. Software: PyTorch 2.10.0+cu128, Transformers 5.3.0.
